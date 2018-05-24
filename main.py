@@ -94,7 +94,7 @@ data_parsers = {
     'WBC-y-data': lambda x: [int(x[start:start+3]) for start in range(0, len(x), 3)],
     'RBC-y-data': lambda x: [int(x[start:start+3]) for start in range(0, len(x), 3)],
     'PLT-y-data': lambda x: [int(x[start:start+3]) for start in range(0, len(x), 3)],
-    'frame-end': lambda x: [x] if (x == '&') else ValueError
+    'frame-end': lambda x: [x] if (x == '#') else ValueError
 }
 
 def transpose(cols):
@@ -112,29 +112,33 @@ def main(args, loglevel):
 
     logging.info(f'Indicated COM PORT is {args.com_port}')
     ser = serial.Serial(args.com_port, 9600)
+    while True:
+        logging.info('Ready to receive data! Waiting..')
+        data = ser.read(2096)
 
-    logging.info('Ready to receive data! Waiting..')
-    data = ser.read(2096)
 
-    logging.info('Data has been received!')
-    data = "".join(map(chr, data))
+        logging.info('Data has been received!')
+        data = "".join(map(chr, data))
 
-    logging.info('Checking data integrity..')
-    if not (data[0:2] == '@a' and data[-1] == '&'):
-        logging.error(f'Please re-run! Got header: {data[0:2]},tail: {data[-1]}')
-        raise ValueError
+        logging.info('Checking data integrity..')
+        if not (data[0:2] == '@a' and data[-1] == '#'):
+            logging.error(f'Please re-run! Got header: {data[0:2]},tail: {data[-1]}')
+            raise ValueError
     
-    logging.info('Parsing and converting data..')
-    converted_data = parse_data(data)
+        logging.info('Parsing and converting data..')
+        converted_data = parse_data(data)
 
-    logging.info('Writing to CSV file..')
-    with open('output.csv','w') as out_file:
-        writer = csv.writer(out_file, dialect = 'excel')
-        headers = converted_data.keys()
-        items = transpose(converted_data.values())
-        writer.writerow(headers)
-        writer.writerows(items)
-    logging.info('Success!')
+
+        logging.info('Writing to CSV file..')
+        now = str(datetime.now()).replace(':', '-')
+        with open(now + '.csv','w') as out_file:
+            writer = csv.writer(out_file, dialect = 'excel')
+            headers = converted_data.keys()
+            items = transpose(converted_data.values())
+            writer.writerow(headers)
+            writer.writerows(items)
+        
+        logging.info('Success!')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -158,4 +162,3 @@ if __name__ == '__main__':
         loglevel = logging.INFO
 
     main(args, loglevel)
-
