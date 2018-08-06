@@ -55,7 +55,8 @@ char_positions = {
     'WBC-y-data': (175, 943),
     'RBC-y-data': (943, 1711),
     'PLT-y-data': (1711, 2095),
-    'frame-end': (2095, 2096)
+    'frame-end': (2095, 2096),
+    'id': (2096, 2107)
 }
 
 data_parsers = {
@@ -94,7 +95,8 @@ data_parsers = {
     'WBC-y-data': lambda x: [int(x[start:start+3]) for start in range(0, len(x), 3)],
     'RBC-y-data': lambda x: [int(x[start:start+3]) for start in range(0, len(x), 3)],
     'PLT-y-data': lambda x: [int(x[start:start+3]) for start in range(0, len(x), 3)],
-    'frame-end': lambda x: [x] if (x == '#') else ValueError
+    'frame-end': lambda x: [x] if (x == '#') else ValueError,
+    'id': lambda x: [x]
 }
 
 def transpose(cols):
@@ -114,15 +116,15 @@ def main(args, loglevel):
     ser = serial.Serial(args.com_port, 9600)
     while True:
         logging.info('Ready to receive data! Waiting..')
-        data = ser.read(2096)
+        data = ser.read(2107)
 
 
         logging.info('Data has been received!')
         data = "".join(map(chr, data))
 
         logging.info('Checking data integrity..')
-        if not (data[0:2] == '@a' and data[-1] == '#'):
-            logging.error(f'Please re-run! Got header: {data[0:2]},tail: {data[-1]}')
+        if not (data[0:2] == '@a' and data[-2] == '#'):
+            logging.error(f'Please re-run! Got header: {data[0:2]},tail: {data[-2]}')
             raise ValueError
     
         logging.info('Parsing and converting data..')
