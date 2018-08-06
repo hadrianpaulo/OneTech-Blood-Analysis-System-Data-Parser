@@ -11,15 +11,24 @@ import csv
 def parse_data(data: str):
     parsed = {}
     converted = {}
+    skip = ['frame-head', 'number-mark', 'WBC-warning', 'reserved',
+            'WBC-hist-scale-line-pos', 'RBC-hist-scale-line-pos',
+            'PLT-hist-scale-line-pos', 'reserved2', 'WBC-y-data',
+            'RBC-y-data', 'PLT-y-data', 'frame-end', 'RBC-dec', 'omission',
+            'RcdNo']
     for key in char_positions.keys():
-        start, end = char_positions[key]
-        parsed[key] = data[start:end]
+        if key not in skip:
+            start, end = char_positions[key]
+            parsed[key] = data[start:end]
     for key in data_parsers.keys():
-        converted[key] = data_parsers[key](parsed[key])
+        if key not in skip:
+            converted[key] = data_parsers[key](parsed[key])
     return converted
 
 
 char_positions = {
+    'id': (2096, 2105),
+    'name': (2106, 2120),
     'frame-head': (0, 2),
     'number-mark': (2, 11),
     'test-date': (11, 25),
@@ -55,17 +64,18 @@ char_positions = {
     'WBC-y-data': (175, 943),
     'RBC-y-data': (943, 1711),
     'PLT-y-data': (1711, 2095),
-    'frame-end': (2095, 2096),
-    'id': (2096, 2107)
+    'frame-end': (2095, 2096)
 }
 
 data_parsers = {
+    'id': lambda x: [x],
+    'name': lambda x: [x.split('#')[0]],
     'frame-head': lambda x: [x] if (x == '@a') else ValueError,
-    'number-mark': lambda x:[x],
+    'number-mark': lambda x: [x],
     'test-date': lambda x: [str(datetime.strptime(x, '%Y%m%d%H%M%S'))],
     'WBC': lambda x: [x[0:2] + '.' + x[2] + ' ' + x[3]],
     'LYM%': lambda x: [x[0:2] + '.' + x[2] + '%'],
-    'MID%': lambda x:[ x[0:2] + '.' + x[2] + '%'],
+    'MID%': lambda x: [x[0:2] + '.' + x[2] + '%'],
     'GRAN%': lambda x: [x[0:2] + '.' + x[2] + ' ' + x[3]],
     'LYM#': lambda x: [x[0:2] + '.' + x[2]],
     'MID#': lambda x: [x[0:2] + '.' + x[2]],
@@ -95,9 +105,9 @@ data_parsers = {
     'WBC-y-data': lambda x: [int(x[start:start+3]) for start in range(0, len(x), 3)],
     'RBC-y-data': lambda x: [int(x[start:start+3]) for start in range(0, len(x), 3)],
     'PLT-y-data': lambda x: [int(x[start:start+3]) for start in range(0, len(x), 3)],
-    'frame-end': lambda x: [x] if (x == '#') else ValueError,
-    'id': lambda x: [x]
+    'frame-end': lambda x: [x] if (x == '#') else ValueError
 }
+
 
 def transpose(cols):
     def mypop(l):
@@ -116,31 +126,32 @@ def main(args, loglevel):
     ser = serial.Serial(args.com_port, 9600)
     while True:
         logging.info('Ready to receive data! Waiting..')
-        data = ser.read(2107)
-
+        data = ser.read(2120)
 
         logging.info('Data has been received!')
         data = "".join(map(chr, data))
 
         logging.info('Checking data integrity..')
         if not (data[0:2] == '@a' and data[-2] == '#'):
-            logging.error(f'Please re-run! Got header: {data[0:2]},tail: {data[-2]}')
+            logging.error(
+                f'Please re-run! Got header: {data[0:2]},tail: {data[-2]}')
             raise ValueError
-    
+
         logging.info('Parsing and converting data..')
         converted_data = parse_data(data)
-
+        print(converted_data)
 
         logging.info('Writing to CSV file..')
         now = str(datetime.now()).replace(':', '-')
-        with open(now + '.csv','w') as out_file:
-            writer = csv.writer(out_file, dialect = 'excel')
+        with open(converted_data['id'][0] + '_' + now + '.csv', 'w', newline='') as out_file:
+            writer = csv.writer(out_file, dialect='excel')
             headers = converted_data.keys()
-            items = transpose(converted_data.values())
-            writer.writerow(headers)
-            writer.writerows(items)
-        
+            items = list(map(lambda x: x[0], converted_data.values()))
+            data_to_write = list(zip(headers, items))
+            writer.writerows(data_to_write)
+
         logging.info('Success!')
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
