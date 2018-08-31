@@ -6,6 +6,9 @@ import logging
 from datetime import datetime
 import serial
 import csv
+from docx import Document
+from docx.shared import Cm
+from docx.enum.table import WD_TABLE_ALIGNMENT
 
 
 def parse_data(data: str):
@@ -35,10 +38,10 @@ char_positions = {
     'WBC': (25, 29),
     'LYM%': (29, 33),
     'MID%': (33, 37),
-    'GRAN%': (37, 41),
+    'NEUT%': (37, 41),
     'LYM#': (41, 45),
     'MID#': (45, 49),
-    'GRAN#': (49, 53),
+    'NEUT#': (49, 53),
     'RBC': (53, 57),
     'HGB': (57, 61),
     'HCT': (61, 65),
@@ -76,10 +79,10 @@ data_parsers = {
     'WBC': lambda x: [x[0:2] + '.' + x[2] + ' ' + x[3]],
     'LYM%': lambda x: [x[0:2] + '.' + x[2] + '%'],
     'MID%': lambda x: [x[0:2] + '.' + x[2] + '%'],
-    'GRAN%': lambda x: [x[0:2] + '.' + x[2] + ' ' + x[3]],
+    'NEUT%': lambda x: [x[0:2] + '.' + x[2] + ' ' + x[3]],
     'LYM#': lambda x: [x[0:2] + '.' + x[2]],
     'MID#': lambda x: [x[0:2] + '.' + x[2]],
-    'GRAN#': lambda x: [x[0:2] + '.' + x[2] + ' ' + x[3]],
+    'NEUT#': lambda x: [x[0:2] + '.' + x[2] + ' ' + x[3]],
     'RBC': lambda x: [x[0:1] + '.' + x[1:3] + ' ' + x[3]],
     'HGB': lambda x: [x[0:3] + ' ' + x[3]],
     'HCT': lambda x: [x[0:2] + '.' + x[2] + ' ' + x[3]],
@@ -119,6 +122,35 @@ def transpose(cols):
         yield [mypop(l) for l in cols]
 
 
+def generate_reference():
+    return [
+        'Reference',
+        '',
+        '',
+        '',
+        '10*9/L    6.0 -- 17.0',
+        '%        12.0 -- 30.0',
+        '%         5.0 -- 20.0',
+        '%        60.0 -- 70.0',
+        '10*9/L    1.0 --  4.8',
+        '10*9/L    0.2 --  2.1',
+        '10*9/L    3.0 -- 11.4',
+        '10*12/L   5.5 --  8.5',
+        'g/dL     12.0 -- 18.0',
+        '%        37.0 -- 55.0',
+        'fL       60.0 -- 70.0',
+        'pg       19.5 -- 24.5',
+        'g/dL     32.0 -- 36.0',
+        'fL       37.0 -- 54.0',
+        '%        11.0 -- 15.5',
+        '10*9/L    200 --  900',
+        'fL        7.0 -- 12.0',
+        '%         9.0 -- 30.0',
+        '%         0.1 --  9.9',
+        '%         9.0 -- 50.0',
+    ]
+
+
 def main(args, loglevel):
     logging.basicConfig(format="%(levelname)s: %(message)s", level=loglevel)
 
@@ -139,18 +171,48 @@ def main(args, loglevel):
 
         logging.info('Parsing and converting data..')
         converted_data = parse_data(data)
-        print(converted_data)
 
-        logging.info('Writing to CSV file..')
+        headers = list(converted_data.keys())
+        headers = ['Composition'] + headers
+        items = ['Measured'] + \
+            list(map(lambda x: x[0], converted_data.values()))
+        data_to_write = list(zip(headers, items, generate_reference()))
         now = str(datetime.now()).replace(':', '-')
-        with open(converted_data['id'][0] + '_' + now + '.csv', 'w', newline='') as out_file:
-            writer = csv.writer(out_file, dialect='excel')
-            headers = converted_data.keys()
-            items = list(map(lambda x: x[0], converted_data.values()))
-            data_to_write = list(zip(headers, items))
-            writer.writerows(data_to_write)
 
-        logging.info('Success!')
+        if args.is_docx:
+            logging.info('Writing to docx file..')
+            document = Document()
+
+            sections = document.sections
+            for section in sections:
+                section.left_margin = Cm(1)
+                section.right_margin = Cm(1)
+
+            table = document.add_table(rows=0, cols=3)
+            table.style = 'Light Grid Accent 1'
+            table.alignment = WD_TABLE_ALIGNMENT.LEFT
+            for label, value, ref in data_to_write:
+                row_cells = table.add_row().cells
+                row_cells[0].text = label
+                row_cells[1].text = value
+                row_cells[2].text = ref
+
+            for row in table.rows:
+                for cell in row.cells:
+                    paragraphs = cell.paragraphs
+                    for paragraph in paragraphs:
+                        for run in paragraph.runs:
+                            font = run.font
+                            font.name = 'Courier'
+
+            document.save(f'{converted_data["id"][0]}_{now}.docx')
+
+        else:
+            logging.info('Writing to CSV file..')
+            with open(converted_data['id'][0] + '_' + now + '.csv', 'w', newline='') as out_file:
+                writer = csv.writer(out_file, dialect='excel')
+                writer.writerows(data_to_write)
+            logging.info('Success!')
 
 
 if __name__ == '__main__':
@@ -166,6 +228,18 @@ if __name__ == '__main__':
         "--verbose",
         help="increase output verbosity",
         action="store_true")
+    parser.add_argument(
+        "--docx",
+        "--doc",
+        dest='is_docx',
+        action='store_true',
+        help="Generate to docx. This is the default",)
+    parser.add_argument(
+        "--csv",
+        dest='is_docx',
+        action='store_false',
+        help="Generate to csv.",)
+    parser.set_defaults(is_docx=True)
     args = parser.parse_args()
 
     # Setup logging
