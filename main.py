@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import sys
 import argparse
 import logging
@@ -203,7 +201,7 @@ def main(args, loglevel):
                     for paragraph in paragraphs:
                         for run in paragraph.runs:
                             font = run.font
-                            font.name = 'Courier'
+                            font.name = 'Consolas'
 
             document.save(f'{converted_data["id"][0]}_{now}.docx')
 
