@@ -156,6 +156,8 @@ def main(args, loglevel):
     ser = serial.Serial(args.com_port, 9600)
     while True:
         logging.info('Ready to receive data! Waiting..')
+        ser.flushInput()
+        ser.flushOutput()
         data = ser.read(2120)
 
         logging.info('Data has been received!')
